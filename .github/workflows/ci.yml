@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -cover
+
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Checksum zz_generated.go before generate
+        id: before
+        run: echo "sha=$(sha256sum zz_generated.go | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Run go generate
+        run: go generate ./...
+
+      - name: Checksum zz_generated.go after generate
+        id: after
+        run: echo "sha=$(sha256sum zz_generated.go | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Fail if generated code is out of date
+        if: steps.before.outputs.sha != steps.after.outputs.sha
+        run: |
+          echo "zz_generated.go does not match 'go generate ./...' output." >&2
+          echo "Run 'make generate' (or 'go generate ./...') and commit the result." >&2
+          git diff -- zz_generated.go
+          exit 1
